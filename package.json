@@ -1,0 +1,35 @@
+{
+  "name": "saucedemo-playwright",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "playwright test",
+    "test:smoke": "playwright test --grep @smoke",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "report": "playwright show-report reports/html",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc -p .",
+    "check": "npm run typecheck && npm run lint && npm run format:check"
+  },
+  "author": "Lucas Astrada",
+  "license": "MIT",
+  "description": "Playwright + TypeScript automation framework for saucedemo.com",
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^26.6.4",
+    "dotenv": "^18.0.7",
+    "eslint": "^10.12.0",
+    "eslint-plugin-playwright": "^2.12.1",
+    "prettier": "^3.9.9",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.1"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  }
+}
