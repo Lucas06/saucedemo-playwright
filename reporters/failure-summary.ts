@@ -19,6 +19,9 @@ import type {
  *   - the error message and source snippet,
  *   - where the trace / screenshot / video / browser events live.
  *
+ * With retries enabled, only the last attempt of each test is reported (with the attempt count),
+ * and tests that failed but then passed on retry are listed separately as flaky.
+ *
  * Meant to be the first thing a human (in CI logs) or an AI agent reads when a run goes red.
  */
 
@@ -38,7 +41,7 @@ interface FailureRecord {
   test: string;
   file: string;
   project: string;
-  retry: number;
+  attempts: number;
   status: TestResult['status'];
   failedStep?: StepLine;
   steps: StepLine[];
@@ -50,7 +53,9 @@ interface FailureRecord {
 export default class FailureSummaryReporter implements Reporter {
   private readonly outputDir: string;
   private readonly redact: string[];
-  private readonly failures: FailureRecord[] = [];
+  /** Keyed by test id so a retry replaces the previous attempt instead of duplicating it. */
+  private readonly failures = new Map<string, FailureRecord>();
+  private readonly flaky: { test: string; file: string; attempts: number }[] = [];
   private rootDir = process.cwd();
 
   /**
@@ -71,7 +76,15 @@ export default class FailureSummaryReporter implements Reporter {
   }
 
   onTestEnd(test: TestCase, result: TestResult): void {
-    if (result.status === test.expectedStatus) return;
+    const title = test.titlePath().filter(Boolean).slice(2).join(' › ');
+    const file = this.relative(test.location.file, test.location.line);
+
+    if (result.status === test.expectedStatus) {
+      if (this.failures.delete(test.id)) {
+        this.flaky.push({ test: title, file, attempts: result.retry + 1 });
+      }
+      return;
+    }
 
     const steps: StepLine[] = [];
     const walk = (list: TestStep[], depth: number) => {
@@ -99,11 +112,11 @@ export default class FailureSummaryReporter implements Reporter {
       steps.findLast((s) => s.status === 'interrupted');
     const error = result.errors[0] ?? result.error;
 
-    this.failures.push({
-      test: test.titlePath().filter(Boolean).slice(2).join(' › '),
-      file: this.relative(test.location.file, test.location.line),
+    this.failures.set(test.id, {
+      test: title,
+      file,
       project: test.parent.project()?.name ?? '',
-      retry: result.retry,
+      attempts: result.retry + 1,
       status: result.status,
       failedStep,
       steps,
@@ -120,19 +133,33 @@ export default class FailureSummaryReporter implements Reporter {
     const mdPath = path.join(this.outputDir, 'failure-summary.md');
     fs.writeFileSync(
       path.join(this.outputDir, 'failure-summary.json'),
-      JSON.stringify({ status: result.status, failures: this.failures }, null, 2),
+      JSON.stringify(
+        { status: result.status, failures: [...this.failures.values()], flaky: this.flaky },
+        null,
+        2,
+      ),
     );
     fs.writeFileSync(mdPath, this.toMarkdown(result));
 
-    if (this.failures.length > 0) {
-      console.log(`\n${this.failures.length} failure(s) summarised in ${mdPath}`);
+    if (this.failures.size > 0) {
+      console.log(`\n${this.failures.size} failure(s) summarised in ${mdPath}`);
     }
   }
 
   private toMarkdown(result: FullResult): string {
-    if (this.failures.length === 0) return `# Test run: ${result.status}\n\nNo failures.\n`;
+    const flaky = this.flaky.length
+      ? [
+          '## Flaky (failed, then passed on retry)',
+          '',
+          ...this.flaky.map((f) => `- ${f.test} (\`${f.file}\`, ${f.attempts} attempts)`),
+          '',
+        ].join('\n')
+      : '';
+    if (this.failures.size === 0) {
+      return `# Test run: ${result.status}\n\nNo failures.\n${flaky ? `\n${flaky}` : ''}`;
+    }
 
-    const sections = this.failures.map((f, i) => {
+    const sections = [...this.failures.values()].map((f, i) => {
       const steps = f.steps
         .map((s) => {
           const marker = { passed: '✔', failed: '✘', interrupted: '⏸' }[s.status];
@@ -152,7 +179,7 @@ export default class FailureSummaryReporter implements Reporter {
         `## ${i + 1}. ${f.test}`,
         '',
         `- **File**: \`${f.file}\``,
-        `- **Project**: ${f.project} · **Retry**: ${f.retry} · **Status**: ${f.status}`,
+        `- **Project**: ${f.project} · **Attempts**: ${f.attempts} · **Status**: ${f.status}`,
         `- **Failed step**: ${failedAt}`,
         '',
         '### Steps',
@@ -175,7 +202,8 @@ export default class FailureSummaryReporter implements Reporter {
       ].join('\n');
     });
 
-    return `# Test run: ${result.status} — ${this.failures.length} failure(s)\n\n${sections.join('\n---\n\n')}`;
+    const body = sections.join('\n---\n\n');
+    return `# Test run: ${result.status} — ${this.failures.size} failure(s)\n\n${body}${flaky ? `\n---\n\n${flaky}` : ''}`;
   }
 
   private mask(text: string): string {

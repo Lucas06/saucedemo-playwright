@@ -98,6 +98,7 @@ Received: "Epic sadface: Sorry, this user has been locked out."
 ```
 
 - Steps that never finished (timeouts, crashes) are marked `⏸ did not finish`.
+- With retries (CI runs up to 3 attempts), each test appears once with its attempt count, and tests that passed on retry are listed under **Flaky**.
 - Secrets (the password) are masked in step titles and errors.
 - In CI the summary is also posted to the **GitHub job summary page**, and reports and traces are uploaded as artifacts.
 - The `browserEvents` auto-fixture records console errors, uncaught exceptions, failed requests and HTTP ≥ 400 responses, and attaches them **only when the test fails**.
