@@ -61,6 +61,9 @@ spec ──uses──▶ fixtures (@fixtures) ──inject──▶ page objects
 
 ## Reporting & debugging
 
+> [!TIP]
+> **See it on a real CI run:** [PR #1](https://github.com/Lucas06/saucedemo-playwright/pull/1) is an **intentionally failing, never-to-be-merged** demo. It adds one test with a deliberately wrong assertion so you can inspect the job summary, the inline annotations and the downloadable traces. `main` stays green.
+
 Every run produces:
 
 | Output                                               | Purpose                                                                                               |
